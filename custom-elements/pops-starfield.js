@@ -48,6 +48,36 @@
     connectedCallback() {
       // Runs immediately on attach to the live DOM — this is the no-pop-in win.
       if (!this._built) this._build();
+      this._sizeHost();
+      // Re-fit whenever Wix resizes the element (responsive breakpoints, drag).
+      if (window.ResizeObserver && !this._ro) {
+        this._ro = new ResizeObserver(function(){ this._sizeHost(); }.bind(this));
+        try { this._ro.observe(this); } catch(e){}
+      }
+      window.addEventListener('resize', this._onResize = function(){ this._sizeHost(); }.bind(this));
+    }
+
+    disconnectedCallback() {
+      if (this._ro) { try { this._ro.disconnect(); } catch(e){} this._ro = null; }
+      if (this._onResize) window.removeEventListener('resize', this._onResize);
+    }
+
+    // Wix frequently gives the host no resolvable height, so `height:100%` collapses
+    // to min-height and the starfield only fills a short band (white below it). Fix:
+    // take height from the PARENT box Wix actually sized (the container the element
+    // sits in), and pin the host to that pixel height so .scene (inset:0) fills the
+    // WHOLE box the user drew. We temporarily clear our own height first so our own
+    // collapsed/min-height value can't pollute the parent measurement.
+    _sizeHost() {
+      // Clear our explicit height so the parent reflects only the Wix-drawn box.
+      this.style.height = 'auto';
+      var p = this.parentElement;
+      var ph = p ? p.getBoundingClientRect().height : 0;
+      var sh = this.getBoundingClientRect().height; // our own (may be collapsed)
+      // Prefer the parent height when it's meaningfully bigger than our collapsed box.
+      var h = Math.max(ph, sh);
+      if (h >= 8) this.style.height = Math.round(h) + 'px';
+      else this.style.height = '100%';
     }
 
     attributeChangedCallback() {
@@ -78,9 +108,11 @@
       // ---- shadow DOM markup + scoped styles ------------------------------
       this.shadowRoot.innerHTML =
         '<style>' +
-        // :host is a positioning context so .scene's inset:0 resolves; height:100%
-        // fills the Wix box, and min-height is a fallback so it never collapses to
-        // 0px (which would render invisible) if Wix gives the host an auto height.
+        // :host fills the Wix element box. We size it to the VIEWPORT-independent
+        // box Wix gives the element. height:100% only works if the parent has a
+        // height — Wix often doesn't define one, so we ALSO measure the host's real
+        // pixel height in JS (see _sizeHost) and set it explicitly. position:relative
+        // makes .scene's inset:0 resolve against the host.
         ':host{display:block;position:relative;width:100%;height:100%;min-height:120px;}' +
         '.scene{position:absolute;inset:0;pointer-events:none;overflow:hidden;' +
           'background:' + bg + ';' +
