@@ -26,6 +26,16 @@
      mode="flat"   -> flat dark canvas, no glow, no clip (generic background).
      density="..." -> star multiplier (1 = default, 1.6 = fuller, 0.7 = sparser).
      cut-left="64%"  cut-right="14%"   (only used when mode="wedge")
+     height="640"  -> pin the sky to an EXACT pixel height (best for a fixed band).
+     vh="100"      -> OR size to a % of the viewport (default 100 = full screen).
+
+   SIZING — why height/vh and NOT "fill the section": Wix sections are auto-height,
+   so they grow to fit their content. If this element measured the section and matched
+   it, the section would then grow to match the element, in a runaway loop (it hit
+   ~123675px live). Instead we declare a STABLE height the element can't inflate, and
+   the auto-height section shrink-wraps to it. So: in the Studio editor, leave the
+   section/element on AUTO height and let `height`/`vh` here drive it. For a hero,
+   the default vh="100" gives a full-screen sky. For a shorter band, set height="520".
 
    It uses Shadow DOM so its CSS can't leak into / be broken by Wix's styles.
    Brand: canvas #0B0710 · violet #8A4FFF · glow #B57BFF · gold #F5C542 ·
@@ -42,95 +52,55 @@
     }
 
     static get observedAttributes() {
-      return ['mode', 'density', 'cut-left', 'cut-right'];
+      return ['mode', 'density', 'cut-left', 'cut-right', 'height', 'vh'];
     }
 
     connectedCallback() {
       // Runs immediately on attach to the live DOM — this is the no-pop-in win.
       if (!this._built) this._build();
 
-      // Size NOW so the box is filled on the very first paint (no collapsed band,
-      // no "snap to full size on scroll" that reads as a pop-in). Then keep
-      // re-checking for a few frames because Wix lays the section box out a beat
-      // AFTER it attaches the element — on the LIVE site the parent's height is
-      // often still 0/auto on the first tick, which is what left the white band.
+      // Size NOW, once, from a STABLE reference (viewport / explicit height attr).
+      // We deliberately do NOT measure ancestors: on the live Wix DOM the parent
+      // section is auto-height, so measuring it and pinning ourselves to it forms a
+      // FEEDBACK LOOP (host grows -> section grows -> host grows) that ran away to
+      // ~123675px ("extremely big"). A fixed reference can't be inflated by us, so
+      // the auto-height section simply shrink-wraps to whatever height WE declare.
       this._sizeHost();
-      this._retrySizing();
 
-      // Re-fit whenever Wix resizes the element (responsive breakpoints, drag).
-      if (window.ResizeObserver && !this._ro) {
-        this._ro = new ResizeObserver(function(){ this._sizeHost(); }.bind(this));
-        // Observe the element AND its ancestors so a late-resolving section height
-        // triggers a re-fit even if our own box didn't change.
-        try { this._ro.observe(this); } catch(e){}
-        var a = this.parentElement, depth = 0;
-        while (a && depth < 4) { try { this._ro.observe(a); } catch(e){} a = a.parentElement; depth++; }
-      }
+      // Only re-fit on real viewport changes (rotate / responsive breakpoint).
+      // No ResizeObserver on ancestors, no rAF retry loop — those were chasing the
+      // runaway section height every frame and thrashing layout on the live page.
       window.addEventListener('resize', this._onResize = function(){ this._sizeHost(); }.bind(this));
-      // load fires after Wix finishes laying the page out — a reliable final fit.
-      window.addEventListener('load', this._onLoad = function(){ this._sizeHost(); }.bind(this));
     }
 
     disconnectedCallback() {
-      if (this._ro) { try { this._ro.disconnect(); } catch(e){} this._ro = null; }
       if (this._onResize) window.removeEventListener('resize', this._onResize);
-      if (this._onLoad) window.removeEventListener('load', this._onLoad);
-      if (this._raf) cancelAnimationFrame(this._raf);
     }
 
-    // Re-run _sizeHost over several animation frames so we catch the moment Wix
-    // finally gives the section a real height. Stops early once we get a solid box.
-    _retrySizing() {
-      var self = this, tries = 0;
-      var tick = function () {
-        tries++;
-        var solid = self._sizeHost();          // true once we pinned a real px height
-        if (!solid && tries < 30) {            // ~30 frames (~0.5s) max
-          self._raf = requestAnimationFrame(tick);
-        }
-      };
-      self._raf = requestAnimationFrame(tick);
-    }
-
-    // Wix frequently gives the host no resolvable height, so `height:100%` collapses
-    // to min-height and the starfield only fills a short band (white below it). Fix:
-    // find the first ANCESTOR Wix actually sized (the section box), and pin the host
-    // to that pixel height so .scene (inset:0) fills the WHOLE box the user drew.
-    // We clear our own height first so our collapsed value can't pollute the read.
-    // Returns true when it locked onto a real measured box (so retries can stop).
+    // Pin the host to a STABLE height the element itself cannot inflate.
+    // Priority:
+    //   1. height="640"  (explicit px attribute the owner can set per placement) — best.
+    //   2. fraction of the viewport via vh="..."  (default 100 for hero = full screen).
+    // The auto-height Wix section then shrink-wraps to this number. Because the value
+    // never depends on any ancestor's measured height, there is no circular growth.
     _sizeHost() {
-      // Collapse ourselves to 0 (NOT 'auto' — auto still yields our min-height:120,
-      // which an auto-height WRAPPER parent then inherits, so we'd read our own
-      // collapsed value straight back and lock onto a fake 120px box). At height:0
-      // any wrapper that merely hugs our content also reports ~0, so the first
-      // ancestor with real height is the genuine SECTION box Wix drew.
-      this.style.height = '0px';
+      var px = parseFloat(this.getAttribute('height'));      // explicit pixels?
+      if (px > 0) { this.style.height = Math.round(px) + 'px'; return; }
 
-      // Walk up ancestors and take the LARGEST bounded height BELOW <body>. We skip
-      // body/html (full-page height would overshoot and spill the sky past the
-      // section) and we take the max rather than the first match, because the
-      // immediate parent can be a zero/auto wrapper sitting inside the real section.
-      var h = 0, node = this.parentElement, depth = 0;
-      while (node && depth < 8) {
-        var tag = node.tagName;
-        if (tag === 'BODY' || tag === 'HTML') break;   // never size to the whole page
-        var hh = node.getBoundingClientRect().height;
-        if (hh > h) h = hh;
-        node = node.parentElement; depth++;
-      }
-
-      if (h >= 40) {                          // a real, drawn section box
-        this.style.height = Math.round(h) + 'px';
-        return true;
-      }
-      // Nothing resolved yet: fill the viewport so it's NEVER a collapsed band while
-      // we wait for Wix to lay out. Better an oversized sky than a white gap.
-      this.style.height = '100vh';
-      return false;
+      var vh = parseFloat(this.getAttribute('vh'));          // % of viewport height
+      if (!(vh > 0)) vh = 100;                                // default: full viewport
+      var h = Math.round(window.innerHeight * (vh / 100));
+      // Clamp so a weird viewport can never produce a giant or collapsed band.
+      h = Math.max(160, Math.min(h, 2000));
+      this.style.height = h + 'px';
     }
 
-    attributeChangedCallback() {
-      if (this._built) this._build(); // rebuild if Wix changes an attribute
+    attributeChangedCallback(name) {
+      if (!this._built) return;
+      // height/vh only change the box size — just re-pin, don't regenerate the sky.
+      if (name === 'height' || name === 'vh') { this._sizeHost(); return; }
+      this._build();      // mode/density/cut-* change the look — rebuild.
+      this._sizeHost();
     }
 
     _build() {
