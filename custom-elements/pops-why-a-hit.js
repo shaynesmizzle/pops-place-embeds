@@ -140,7 +140,12 @@
 
       this.shadowRoot.innerHTML =
         '<style>' +
-        "@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@200;600&display=swap');" +
+        // NO @import here. A render-blocking @import to fonts.googleapis.com inside
+        // the shadow CSS stalls the element's first paint for seconds on Wix's busy
+        // live page (that was the 4s "slow load"). Poppins is already loaded by the
+        // Wix site itself; because a custom element renders in the PAGE DOM (not an
+        // iframe), we can just reference it by name — with a system fallback so text
+        // is never invisible while the page-level font is still warming up.
         ':host{display:block;position:relative;width:100%;height:100%;min-height:220px;' +
           '--canvas:#0B0710;--violet:#8A4FFF;--glow:#B57BFF;--gold:#F5C542;' +
           '--peri:#BFC4F0;--text:#F4F1FA;--card-line:rgba(181,123,255,0.22);}' +
@@ -273,8 +278,8 @@
               '<svg class="icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
                 '<path d="M12 30c0-7 5-12 12-12s12 5 12 12"/>' +
                 '<path d="M9 30h30"/>' +
-                '<path class="shimmer" d="M16 18l3-5M24 17l1-6M32 18l-3-5"/>' +
-                '<circle class="spark" cx="24" cy="35" r="1.6" fill="currentColor" stroke="none"/>' +
+                '<path class="spark shimmer" d="M16 18l3-5M24 17l1-6M32 18l-3-5"/>' +
+                '<circle cx="24" cy="35" r="1.6" fill="currentColor" stroke="none"/>' +
               '</svg>' +
               '<h3 class="ctitle">Real Caribbean Kitchen</h3>' +
               '<p class="cbody">Jerk, oxtail, festival, plantain — nyamins done right.</p>' +
@@ -282,8 +287,7 @@
 
             '<article class="card"><div class="num">03</div>' +
               '<svg class="icon vibe" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                '<path d="M17 14c-2 2-2 4 0 6M24 13c-2 2-2 4 0 6"/>' +
-                '<path class="spark" d="M31 14c-2 2-2 4 0 6"/>' +
+                '<path class="spark" d="M17 14c-2 2-2 4 0 6M24 13c-2 2-2 4 0 6M31 14c-2 2-2 4 0 6"/>' +
                 '<rect x="13" y="22" width="22" height="14" rx="3"/>' +
                 '<path d="M35 25h3a3 3 0 0 1 0 6h-3"/>' +
               '</svg>' +
@@ -293,7 +297,7 @@
 
             '<article class="card"><div class="num">04</div>' +
               '<svg class="icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                '<path class="spark twinkle" fill="currentColor" fill-opacity="0.16" stroke-width="2" ' +
+                '<path class="twinkle" fill="currentColor" fill-opacity="0.16" stroke-width="2" ' +
                   'd="M24 11 L26.95 19.05 L35.36 19.42 L28.74 24.58 L31.05 32.68 L24 27.8 L16.95 32.68 L19.26 24.58 L12.64 19.42 L21.05 19.05 Z"/>' +
                 '<path class="spark twinkle" stroke-width="2.2" d="M35.5 13.5l0 3M37 15l-3 0"/>' +
                 '<path class="spark twinkle" stroke-width="2" d="M12.5 31l0 2.4M13.7 32.2l-2.4 0"/>' +
@@ -304,8 +308,8 @@
 
             '<article class="card"><div class="num">05</div>' +
               '<svg class="icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-                '<path class="spark beat" d="M24 34s-9-5.5-9-12a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6.5-9 12-9 12z"/>' +
-                '<path d="M11 20c1-1 2-1 3 0M34 20c1-1 2-1 3 0"/>' +
+                '<path class="beat" d="M24 34s-9-5.5-9-12a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6.5-9 12-9 12z"/>' +
+                '<path class="spark" d="M11 20c1-1 2-1 3 0M34 20c1-1 2-1 3 0"/>' +
               '</svg>' +
               '<h3 class="ctitle">Family-Owned</h3>' +
               '<p class="cbody">Not a chain. This is family — and you’re part of it.</p>' +
